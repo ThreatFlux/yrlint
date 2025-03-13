@@ -1,0 +1,30 @@
+required_meta:
+- description
+- author
+- date
+name_pattern: null
+max_strings_per_rule: 100
+min_atom_length: 4
+forbid_patterns:
+- .*
+- .+
+- .*?
+- .{10,}
+allowed_modules:
+- magic
+- pe
+- dotnet
+- cuckoo
+- math
+- hash
+- elf
+- time
+max_rule_name_length: 128
+check_cross_rule_duplicates: false
+warn_unused_strings: true
+check_condition_order: true
+warn_large_loops: true
+loop_max_size: 1024
+check_rule_complexity: true
+max_condition_depth: 5
+enforce_yara_x: false

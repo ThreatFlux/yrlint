@@ -1,0 +1,63 @@
+# YRLint Configuration
+# This is an example configuration file for the YARA rule linter
+
+# Required metadata fields in YARA rules
+required_meta:
+  - description
+  - author
+  - date
+  - reference
+
+# Pattern for rule names (regex)
+name_pattern: '^[A-Z]{3}_[A-Za-z0-9_]+$'
+
+# Maximum number of strings per rule
+max_strings_per_rule: 100
+
+# Minimum length for string atoms to be efficient
+min_atom_length: 4
+
+# List of regex patterns to forbid (for performance reasons)
+forbid_patterns:
+  - ".*"
+  - ".+"
+  - ".*?"
+  - ".{10,}"
+
+# Allowed YARA modules
+allowed_modules:
+  - pe
+  - elf
+  - math
+  - hash
+  - cuckoo
+  - magic
+  - dotnet
+  - time
+
+# Maximum length of rule names
+max_rule_name_length: 128
+
+# Check for duplicate strings across different rules
+check_cross_rule_duplicates: false
+
+# Warn about unused strings (not referenced in condition)
+warn_unused_strings: true
+
+# Check condition order (filesize and cheap checks first)
+check_condition_order: true
+
+# Warn about loops with large iteration ranges
+warn_large_loops: true
+
+# Maximum recommended filesize value for loop bounds
+loop_max_size: 1024
+
+# Check for rule complexity (condition depth/size)
+check_rule_complexity: true
+
+# Maximum depth of nested conditions
+max_condition_depth: 5
+
+# Enforce YARA-X compatibility
+enforce_yara_x: false

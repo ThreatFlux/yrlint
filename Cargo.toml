@@ -1,0 +1,40 @@
+[package]
+name = "yrlint"
+version = "0.1.0"
+edition = "2021"
+authors = ["YARA Rule Linter Developer"]
+description = "A linter for YARA rules that checks for best practices and performance issues"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/username/yrlint"
+
+[dependencies]
+# YARA rule parsing using regex
+
+# Configuration and serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1.0"
+
+# CLI arguments parsing
+clap = { version = "4.3", features = ["derive"] }
+
+# Error handling and utilities
+anyhow = "1.0"
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.10"
+
+# Progress reporting
+indicatif = "0.17"
+
+# File handling utilities
+globset = "0.4"
+walkdir = "2.3"
+
+# Regular expressions
+regex = "1.9"
+
+[dev-dependencies]
+pretty_assertions = "1.3"
+tempfile = "3.8"
