@@ -97,9 +97,8 @@ fn test_github_output_format() {
         output_str.contains("::error file=test/file1.yar,line=10,title=MISSING_REQUIRED_META::")
     );
     assert!(output_str.contains("::warning file=test/file2.yar,line=5,title=SHORT_STRING::"));
-    assert!(output_str.contains(
-        "::notice file=test/file2.yar,line=15,title=INEFFICIENT_CONDITION_ORDER::"
-    ));
+    assert!(output_str
+        .contains("::notice file=test/file2.yar,line=15,title=INEFFICIENT_CONDITION_ORDER::"));
     assert!(
         output_str.contains("::notice::YARA Linter found 1 errors, 1 warnings, and 1 info issues")
     );

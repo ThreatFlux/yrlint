@@ -3,7 +3,6 @@ use std::path::Path;
 use tempfile::tempdir;
 use yrlint::config::Config;
 use yrlint::linter::{lint_files, IssueSeverity};
-use yrlint::parser::Rule;
 
 #[test]
 fn test_lint_good_rule() {
@@ -40,7 +39,7 @@ fn test_lint_bad_rule() {
     let results = lint_files(&[path], &config, false).unwrap();
 
     // Bad rule should have multiple issues
-    assert!(results.issues.len() > 0, "Bad rule should have issues");
+    assert!(!results.issues.is_empty(), "Bad rule should have issues");
 
     // Check for specific issues
     let has_short_string_issue = results.issues.iter().any(|i| i.code == "SHORT_STRING");

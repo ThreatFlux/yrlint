@@ -1,5 +1,5 @@
 use std::path::Path;
-use yrlint::parser::{parse_content, Rule, StringType};
+use yrlint::parser::{parse_content, StringType};
 
 #[test]
 fn test_parse_empty_rule() {

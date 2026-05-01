@@ -93,8 +93,10 @@ fn test_check_naming() {
     );
 
     // Test with name pattern
-    let mut config = Config::default();
-    config.name_pattern = Some("^[A-Z]{3}_.*$".to_string());
+    let config = Config {
+        name_pattern: Some("^[A-Z]{3}_.*$".to_string()),
+        ..Config::default()
+    };
     let issues = check_naming::check(&rule, &config);
     assert!(
         issues.iter().any(|i| i.code == "RULE_NAME_PATTERN"),
@@ -196,8 +198,10 @@ fn test_check_structure() {
     );
 
     // Test with YARA-X enabled and duplicate modifiers
-    let mut config = Config::default();
-    config.enforce_yara_x = true;
+    let config = Config {
+        enforce_yara_x: true,
+        ..Config::default()
+    };
     let mut rule = create_test_rule();
     rule.source = "private private rule test_rule { condition: true }".to_string();
     let issues = check_structure::check(&rule, &config);

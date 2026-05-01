@@ -164,12 +164,7 @@ fn print_github_format<W: Write>(results: &LintResults, out: &mut W) -> Result<(
         writeln!(
             out,
             "::{} file={},line={},title={}::{} [{}]",
-            severity,
-            issue.file_path,
-            issue.line,
-            issue.code,
-            issue.message,
-            issue.rule_name
+            severity, issue.file_path, issue.line, issue.code, issue.message, issue.rule_name
         )?;
     }
 
