@@ -26,6 +26,7 @@ fn test_cli_find_rule_files() {
     let cli = Cli {
         paths: vec![file1_path.clone()],
         config: PathBuf::from(".yrlint.yml"),
+        generate_config: false,
         format: "text".to_string(),
         fix: false,
         no_fail: false,
@@ -42,6 +43,7 @@ fn test_cli_find_rule_files() {
     let cli = Cli {
         paths: vec![temp_dir.path().to_path_buf()],
         config: PathBuf::from(".yrlint.yml"),
+        generate_config: false,
         format: "text".to_string(),
         fix: false,
         no_fail: false,
@@ -57,6 +59,7 @@ fn test_cli_find_rule_files() {
     let cli = Cli {
         paths: vec![temp_dir.path().to_path_buf()],
         config: PathBuf::from(".yrlint.yml"),
+        generate_config: false,
         format: "text".to_string(),
         fix: false,
         no_fail: false,
@@ -72,6 +75,7 @@ fn test_cli_find_rule_files() {
     let cli = Cli {
         paths: vec![temp_dir.path().to_path_buf()],
         config: PathBuf::from(".yrlint.yml"),
+        generate_config: false,
         format: "text".to_string(),
         fix: false,
         no_fail: false,

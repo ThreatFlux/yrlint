@@ -83,7 +83,7 @@ rule test_rule {
         .expect("Failed to run yrlint with JSON output");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.starts_with("{"), "JSON output should start with {");
+    assert!(stdout.starts_with("{"), "JSON output should start with {{");
     assert!(
         stdout.contains("\"code\":\"SHORT_STRING\""),
         "JSON should contain issue code"

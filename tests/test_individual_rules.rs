@@ -82,7 +82,8 @@ fn test_check_metadata() {
 fn test_check_naming() {
     // Test with default config (no name pattern)
     let config = Config::default();
-    let rule = create_test_rule();
+    let mut rule = create_test_rule();
+    rule.name = "rulename".to_string();
     let issues = check_naming::check(&rule, &config);
 
     // Should have info about underscore naming convention

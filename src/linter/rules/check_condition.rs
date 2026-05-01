@@ -37,7 +37,7 @@ pub fn check(rule: &Rule, config: &Config) -> Vec<LintIssue> {
 /// Check for loops with large iteration ranges
 fn check_large_loops(rule: &Rule, condition: &str, config: &Config, issues: &mut Vec<LintIssue>) {
     // Look for for-loops with filesize or large constant as bound
-    let loop_pattern = Regex::new(r"for\s+\w+\s+in\s+\(.*?filesize").unwrap();
+    let loop_pattern = Regex::new(r"for\s+(?:\w+\s+)?\w+\s+in\s+\(.*?filesize").unwrap();
 
     if loop_pattern.is_match(condition) {
         issues.push(LintIssue {
@@ -94,7 +94,7 @@ fn check_condition_order(rule: &Rule, condition: &str, issues: &mut Vec<LintIssu
 
         // Check for patterns like "string_check and filesize < X" (string check before filesize)
         let string_then_filesize = rule.strings.iter().any(|s| {
-            let pattern = format!(r"{}\s+and\s+filesize", s.identifier);
+            let pattern = format!(r"{}\s+and\s+filesize", regex::escape(&s.identifier));
             Regex::new(&pattern).unwrap().is_match(condition)
         });
 

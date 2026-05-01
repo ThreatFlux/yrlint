@@ -98,18 +98,91 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
     let path = path.as_ref();
     debug!("Parsing YARA file: {}", path.display());
 
-    // Simple regex-based parser for YARA rules
     let mut rules = Vec::new();
 
-    // Match rule structure
-    let rule_regex = r"(?m)^\s*(?:(?:global|private)\s+)*rule\s+([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_\s]+))?\s*\{([\s\S]*?)\}";
+    let rule_regex =
+        r"(?m)^(?:(?:\s*(?:global|private)\s+)*?)rule\s+([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_\s]+))?\s*\{";
     let rule_pattern = match Regex::new(rule_regex) {
         Ok(re) => re,
         Err(e) => return Err(ParseError::ParseError(format!("Invalid rule regex: {}", e)).into()),
     };
 
-    // Find all rules in the content
-    for cap in rule_pattern.captures_iter(content) {
+    // Scan each rule using brace matching to avoid splitting on braces inside hex strings.
+    let mut offset = 0;
+    let bytes = content.as_bytes();
+    while offset < content.len() {
+        let segment = &content[offset..];
+        let Some(cap) = rule_pattern.captures(segment) else {
+            break;
+        };
+
+        let full_match = match cap.get(0) {
+            Some(m) => m,
+            None => break,
+        };
+
+        let start = offset + full_match.start();
+        let open_brace = offset + full_match.end() - 1;
+        let mut index = open_brace + 1;
+        let mut depth = 1;
+        let mut in_double_quote = false;
+        let mut in_hex_string = false;
+        let mut prev = b'\0';
+
+        while index < bytes.len() && depth > 0 {
+            let ch = bytes[index];
+
+            if in_double_quote {
+                if ch == b'"' && prev != b'\\' {
+                    in_double_quote = false;
+                }
+                prev = ch;
+                index += 1;
+                continue;
+            }
+
+            if in_hex_string {
+                if ch == b'}' {
+                    in_hex_string = false;
+                }
+                prev = ch;
+                index += 1;
+                continue;
+            }
+
+            match ch {
+                b'"' => {
+                    in_double_quote = true;
+                }
+                b'{' => {
+                    let mut lookback = index;
+                    while lookback > open_brace + 1 && bytes[lookback - 1].is_ascii_whitespace() {
+                        lookback -= 1;
+                    }
+
+                    if lookback > open_brace + 1 && bytes[lookback - 1] == b'=' {
+                        in_hex_string = true;
+                    } else {
+                        depth += 1;
+                    }
+                }
+                b'}' => {
+                    depth -= 1;
+                }
+                _ => {}
+            }
+
+            prev = ch;
+            index += 1;
+        }
+
+        if depth != 0 || index >= bytes.len() {
+            break;
+        }
+
+        let close_brace = index - 1;
+        let rule_text = &content[start..=close_brace];
+        let rule_body = &content[open_brace + 1..close_brace];
         let name = cap.get(1).map_or("", |m| m.as_str()).to_string();
         let tags_str = cap.get(2).map_or("", |m| m.as_str());
         let tags = tags_str
@@ -118,12 +191,9 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
             .map(|s| s.to_string())
             .collect::<Vec<_>>();
 
-        let rule_body = cap.get(3).map_or("", |m| m.as_str());
-        let rule_text = cap.get(0).map_or("", |m| m.as_str()).to_string();
-        let line_number = content[..cap.get(0).unwrap().start()].lines().count() + 1;
+        let line_number = content[..start].lines().count() + 1;
 
-        // Determine if rule has modifiers
-        let modifiers_regex = r"(?m)^\s*(global|private)\s+rule";
+        let modifiers_regex = r"\b(global|private)\b";
         let modifiers_pattern = match Regex::new(modifiers_regex) {
             Ok(re) => re,
             Err(e) => {
@@ -134,8 +204,8 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
         };
 
         let modifiers = modifiers_pattern
-            .captures_iter(&rule_text)
-            .filter_map(|c| c.get(1))
+            .captures_iter(full_match.as_str())
+            .filter_map(|m| m.get(1))
             .map(|m| m.as_str().to_string())
             .collect::<Vec<_>>();
 
@@ -147,6 +217,11 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
 
         // Extract condition
         let condition = extract_condition(rule_body)?;
+        if condition.trim().is_empty() {
+            return Err(
+                ParseError::ParseError(format!("Rule '{}' is missing a valid condition", name)).into(),
+            );
+        }
 
         // Extract modules (imported)
         let modules = extract_modules(content)?;
@@ -162,8 +237,10 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
             string_refs,
             condition,
             modules,
-            source: rule_text,
+            source: rule_text.to_string(),
         });
+
+        offset = close_brace + 1;
     }
 
     if rules.is_empty() {

@@ -7,6 +7,9 @@ use regex::Regex;
 pub fn check(rule: &Rule, config: &Config) -> Vec<LintIssue> {
     let mut issues = Vec::new();
 
+    let unbounded_pattern = Regex::new(r"\.\*|\.\+|\{[0-9]+,\}").unwrap();
+    let has_literal = Regex::new(r"[a-zA-Z0-9_]{4,}").unwrap();
+
     // Check for too many strings
     if rule.strings.len() > config.max_strings_per_rule {
         issues.push(LintIssue {
@@ -128,7 +131,6 @@ pub fn check(rule: &Rule, config: &Config) -> Vec<LintIssue> {
             }
 
             // Check for unbounded quantifiers
-            let unbounded_pattern = Regex::new(r"\.\*|\.\+|\{[0-9]+,\}").unwrap();
             if unbounded_pattern.is_match(value) {
                 issues.push(LintIssue {
                     rule_name: rule.name.clone(),
@@ -145,7 +147,6 @@ pub fn check(rule: &Rule, config: &Config) -> Vec<LintIssue> {
             }
 
             // Check for regex with no literal segment
-            let has_literal = Regex::new(r"[a-zA-Z0-9_]{4,}").unwrap();
             if !has_literal.is_match(value) {
                 issues.push(LintIssue {
                     rule_name: rule.name.clone(),
