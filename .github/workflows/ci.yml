@@ -16,6 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
       - uses: Swatinem/rust-cache@v2
       - name: Run tests
         run: cargo test --verbose
@@ -49,6 +51,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
       - uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --verbose
