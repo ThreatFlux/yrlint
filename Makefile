@@ -108,9 +108,6 @@ endif
 	@echo -e "$(YELLOW)Building Docker image...$(NC)"
 	@mkdir -p $(DOCKER_DIR)
 	@echo 'FROM rust:1.95-bookworm' > $(DOCKER_DIR)/Dockerfile
-	@echo 'RUN apt-get update && apt-get install -y pkg-config libssl-dev build-essential curl git' >> $(DOCKER_DIR)/Dockerfile
-	@echo 'RUN rustup component add rustfmt clippy' >> $(DOCKER_DIR)/Dockerfile
-	@echo 'RUN cargo install cargo-chef cargo-audit cargo-llvm-cov' >> $(DOCKER_DIR)/Dockerfile
 	@echo 'WORKDIR /app' >> $(DOCKER_DIR)/Dockerfile
 	@echo 'COPY . .' >> $(DOCKER_DIR)/Dockerfile
 	@echo 'RUN cargo build --release' >> $(DOCKER_DIR)/Dockerfile

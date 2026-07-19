@@ -8,12 +8,13 @@ use thiserror::Error;
 
 /// YARA parsing errors
 #[derive(Error, Debug)]
+#[allow(clippy::enum_variant_names)] // Preserve the existing public variant name.
 pub enum ParseError {
     #[error("Failed to read file: {0}")]
     FileReadError(#[from] std::io::Error),
 
     #[error("Failed to parse YARA rule: {0}")]
-    InvalidRule(String),
+    ParseError(String),
 
     #[error("No valid rules found in file")]
     NoRulesFound,
@@ -84,6 +85,18 @@ pub enum StringType {
     Regex,
 }
 
+fn is_escaped(bytes: &[u8], index: usize) -> bool {
+    let mut backslashes = 0;
+    let mut cursor = index;
+
+    while cursor > 0 && bytes[cursor - 1] == b'\\' {
+        backslashes += 1;
+        cursor -= 1;
+    }
+
+    backslashes % 2 == 1
+}
+
 /// Parse a YARA rule file
 pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<Vec<Rule>> {
     let path = path.as_ref();
@@ -103,7 +116,7 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
     let rule_regex = r"(?m)^(?:(?:\s*(?:global|private)\s+)*?)rule\s+([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_\s]+))?\s*\{";
     let rule_pattern = match Regex::new(rule_regex) {
         Ok(re) => re,
-        Err(e) => return Err(ParseError::InvalidRule(format!("Invalid rule regex: {}", e)).into()),
+        Err(e) => return Err(ParseError::ParseError(format!("Invalid rule regex: {}", e)).into()),
     };
 
     // Scan each rule using brace matching to avoid splitting on braces inside hex strings.
@@ -120,22 +133,43 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
             None => break,
         };
 
+        let name = cap.get(1).map_or("", |m| m.as_str()).to_string();
+
         let start = offset + full_match.start();
         let open_brace = offset + full_match.end() - 1;
         let mut index = open_brace + 1;
         let mut depth = 1;
         let mut in_double_quote = false;
         let mut in_hex_string = false;
-        let mut prev = b'\0';
+        let mut in_regex_string = false;
+        let mut in_line_comment = false;
+        let mut in_block_comment = false;
 
         while index < bytes.len() && depth > 0 {
             let ch = bytes[index];
 
+            if in_line_comment {
+                if ch == b'\n' {
+                    in_line_comment = false;
+                }
+                index += 1;
+                continue;
+            }
+
+            if in_block_comment {
+                if ch == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                    in_block_comment = false;
+                    index += 2;
+                } else {
+                    index += 1;
+                }
+                continue;
+            }
+
             if in_double_quote {
-                if ch == b'"' && prev != b'\\' {
+                if ch == b'"' && !is_escaped(bytes, index) {
                     in_double_quote = false;
                 }
-                prev = ch;
                 index += 1;
                 continue;
             }
@@ -144,7 +178,14 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
                 if ch == b'}' {
                     in_hex_string = false;
                 }
-                prev = ch;
+                index += 1;
+                continue;
+            }
+
+            if in_regex_string {
+                if ch == b'/' && !is_escaped(bytes, index) {
+                    in_regex_string = false;
+                }
                 index += 1;
                 continue;
             }
@@ -152,6 +193,24 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
             match ch {
                 b'"' => {
                     in_double_quote = true;
+                }
+                b'/' if bytes.get(index + 1) == Some(&b'/') => {
+                    in_line_comment = true;
+                    index += 1;
+                }
+                b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                    in_block_comment = true;
+                    index += 1;
+                }
+                b'/' => {
+                    let mut lookback = index;
+                    while lookback > open_brace + 1 && bytes[lookback - 1].is_ascii_whitespace() {
+                        lookback -= 1;
+                    }
+
+                    if lookback > open_brace + 1 && bytes[lookback - 1] == b'=' {
+                        in_regex_string = true;
+                    }
                 }
                 b'{' => {
                     let mut lookback = index;
@@ -171,18 +230,16 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
                 _ => {}
             }
 
-            prev = ch;
             index += 1;
         }
 
-        if depth != 0 || index >= bytes.len() {
+        if depth != 0 {
             break;
         }
 
         let close_brace = index - 1;
         let rule_text = &content[start..=close_brace];
         let rule_body = &content[open_brace + 1..close_brace];
-        let name = cap.get(1).map_or("", |m| m.as_str()).to_string();
         let tags_str = cap.get(2).map_or("", |m| m.as_str());
         let tags = tags_str
             .split_whitespace()
@@ -197,7 +254,7 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
             Ok(re) => re,
             Err(e) => {
                 return Err(
-                    ParseError::InvalidRule(format!("Invalid modifiers regex: {}", e)).into(),
+                    ParseError::ParseError(format!("Invalid modifiers regex: {}", e)).into(),
                 )
             }
         };
@@ -217,7 +274,7 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
         // Extract condition
         let condition = extract_condition(rule_body)?;
         if condition.trim().is_empty() {
-            return Err(ParseError::InvalidRule(format!(
+            return Err(ParseError::ParseError(format!(
                 "Rule '{}' is missing a valid condition",
                 name
             ))
@@ -265,7 +322,7 @@ fn extract_metadata(rule_body: &str) -> Result<HashMap<String, String>> {
     let meta_pattern = match Regex::new(meta_regex) {
         Ok(re) => re,
         Err(e) => {
-            return Err(ParseError::InvalidRule(format!("Invalid metadata regex: {}", e)).into())
+            return Err(ParseError::ParseError(format!("Invalid metadata regex: {}", e)).into())
         }
     };
 
@@ -278,7 +335,7 @@ fn extract_metadata(rule_body: &str) -> Result<HashMap<String, String>> {
             Ok(re) => re,
             Err(e) => {
                 return Err(
-                    ParseError::InvalidRule(format!("Invalid key-value regex: {}", e)).into(),
+                    ParseError::ParseError(format!("Invalid key-value regex: {}", e)).into(),
                 )
             }
         };
@@ -310,7 +367,7 @@ fn extract_strings(rule_body: &str) -> Result<(Vec<StringDefinition>, Vec<String
     let strings_pattern = match Regex::new(strings_regex) {
         Ok(re) => re,
         Err(e) => {
-            return Err(ParseError::InvalidRule(format!("Invalid strings regex: {}", e)).into())
+            return Err(ParseError::ParseError(format!("Invalid strings regex: {}", e)).into())
         }
     };
 
@@ -325,7 +382,7 @@ fn extract_strings(rule_body: &str) -> Result<(Vec<StringDefinition>, Vec<String
             Ok(re) => re,
             Err(e) => {
                 return Err(
-                    ParseError::InvalidRule(format!("Invalid text string regex: {}", e)).into(),
+                    ParseError::ParseError(format!("Invalid text string regex: {}", e)).into(),
                 )
             }
         };
@@ -359,7 +416,7 @@ fn extract_strings(rule_body: &str) -> Result<(Vec<StringDefinition>, Vec<String
             Ok(re) => re,
             Err(e) => {
                 return Err(
-                    ParseError::InvalidRule(format!("Invalid hex string regex: {}", e)).into(),
+                    ParseError::ParseError(format!("Invalid hex string regex: {}", e)).into(),
                 )
             }
         };
@@ -386,7 +443,7 @@ fn extract_strings(rule_body: &str) -> Result<(Vec<StringDefinition>, Vec<String
             Ok(re) => re,
             Err(e) => {
                 return Err(
-                    ParseError::InvalidRule(format!("Invalid regex string regex: {}", e)).into(),
+                    ParseError::ParseError(format!("Invalid regex string regex: {}", e)).into(),
                 )
             }
         };
@@ -416,7 +473,7 @@ fn extract_strings(rule_body: &str) -> Result<(Vec<StringDefinition>, Vec<String
     let condition_pattern = match Regex::new(condition_regex) {
         Ok(re) => re,
         Err(e) => {
-            return Err(ParseError::InvalidRule(format!("Invalid condition regex: {}", e)).into())
+            return Err(ParseError::ParseError(format!("Invalid condition regex: {}", e)).into())
         }
     };
 
@@ -439,7 +496,7 @@ fn extract_condition(rule_body: &str) -> Result<String> {
     let condition_pattern = match Regex::new(condition_regex) {
         Ok(re) => re,
         Err(e) => {
-            return Err(ParseError::InvalidRule(format!("Invalid condition regex: {}", e)).into())
+            return Err(ParseError::ParseError(format!("Invalid condition regex: {}", e)).into())
         }
     };
 
@@ -457,7 +514,7 @@ fn extract_modules(content: &str) -> Result<Vec<String>> {
     let module_pattern = match Regex::new(module_regex) {
         Ok(re) => re,
         Err(e) => {
-            return Err(ParseError::InvalidRule(format!("Invalid module regex: {}", e)).into())
+            return Err(ParseError::ParseError(format!("Invalid module regex: {}", e)).into())
         }
     };
 
