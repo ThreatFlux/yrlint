@@ -118,6 +118,12 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
         Ok(re) => re,
         Err(e) => return Err(ParseError::ParseError(format!("Invalid rule regex: {}", e)).into()),
     };
+    let modifiers_pattern = match Regex::new(r"\b(global|private)\b") {
+        Ok(re) => re,
+        Err(e) => {
+            return Err(ParseError::ParseError(format!("Invalid modifiers regex: {}", e)).into())
+        }
+    };
 
     // Scan each rule using brace matching to avoid splitting on braces inside hex strings.
     let mut offset = 0;
@@ -234,7 +240,11 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
         }
 
         if depth != 0 {
-            break;
+            return Err(ParseError::ParseError(format!(
+                "Rule '{}' has an unterminated string, comment, or unbalanced braces",
+                name
+            ))
+            .into());
         }
 
         let close_brace = index - 1;
@@ -248,16 +258,6 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
             .collect::<Vec<_>>();
 
         let line_number = content[..start].lines().count() + 1;
-
-        let modifiers_regex = r"\b(global|private)\b";
-        let modifiers_pattern = match Regex::new(modifiers_regex) {
-            Ok(re) => re,
-            Err(e) => {
-                return Err(
-                    ParseError::ParseError(format!("Invalid modifiers regex: {}", e)).into(),
-                )
-            }
-        };
 
         let modifiers = modifiers_pattern
             .captures_iter(full_match.as_str())
@@ -273,13 +273,6 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
 
         // Extract condition
         let condition = extract_condition(rule_body)?;
-        if condition.trim().is_empty() {
-            return Err(ParseError::ParseError(format!(
-                "Rule '{}' is missing a valid condition",
-                name
-            ))
-            .into());
-        }
 
         // Extract modules (imported)
         let modules = extract_modules(content)?;

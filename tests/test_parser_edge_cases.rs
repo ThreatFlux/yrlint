@@ -156,15 +156,19 @@ rule complex_condition {
 }
 
 #[test]
-fn test_parse_error_on_malformed_rule() {
+fn test_parse_rule_without_condition() {
     let content = r#"
-rule malformed {
-    this is not valid YARA syntax
+rule missing_condition {
+    strings:
+        $text = "still parsed"
 }
 "#;
 
-    let result = parse_content(content, Path::new("test_file.yar"));
-    assert!(result.is_err());
+    let rules = parse_content(content, Path::new("test_file.yar")).unwrap();
+
+    assert_eq!(rules.len(), 1);
+    assert_eq!(rules[0].name, "missing_condition");
+    assert!(rules[0].condition.is_empty());
 }
 
 #[test]
@@ -261,4 +265,22 @@ rule braces_in_literals {
 
     assert_eq!(rules.len(), 1);
     assert!(rules[0].condition.contains("$regex"));
+}
+
+#[test]
+fn test_parse_rejects_unterminated_rule_after_valid_rule() {
+    let content = r#"
+rule valid_rule {
+    condition:
+        true
+}
+
+rule unterminated_rule {
+    condition:
+        true
+"#;
+
+    let error = parse_content(content, Path::new("test_file.yar")).unwrap_err();
+
+    assert!(error.to_string().contains("unterminated_rule"));
 }
