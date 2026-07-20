@@ -1,5 +1,5 @@
 use std::path::Path;
-use yrlint::parser::{parse_content, Rule, StringType};
+use yrlint::parser::{parse_content, StringType};
 
 #[test]
 fn test_parse_empty_rule() {
@@ -156,15 +156,19 @@ rule complex_condition {
 }
 
 #[test]
-fn test_parse_error_on_malformed_rule() {
+fn test_parse_rule_without_condition() {
     let content = r#"
-rule malformed {
-    this is not valid YARA syntax
+rule missing_condition {
+    strings:
+        $text = "still parsed"
 }
 "#;
 
-    let result = parse_content(content, Path::new("test_file.yar"));
-    assert!(result.is_err());
+    let rules = parse_content(content, Path::new("test_file.yar")).unwrap();
+
+    assert_eq!(rules.len(), 1);
+    assert_eq!(rules[0].name, "missing_condition");
+    assert!(rules[0].condition.is_empty());
 }
 
 #[test]
@@ -215,4 +219,68 @@ rule with_private_strings {
 
     assert!(!s1.is_private);
     assert!(s2.is_private);
+}
+
+#[test]
+fn test_parse_rule_without_trailing_newline() {
+    let content = "rule at_eof { condition: true }";
+
+    let rules = parse_content(content, Path::new("test_file.yar")).unwrap();
+
+    assert_eq!(rules.len(), 1);
+    assert_eq!(rules[0].name, "at_eof");
+}
+
+#[test]
+fn test_parse_text_ending_in_escaped_backslash() {
+    let content = r#"
+rule escaped_backslash {
+    strings:
+        $path = "c:\\projects\\ransomware\\"
+    condition:
+        $path
+}
+"#;
+
+    let rules = parse_content(content, Path::new("test_file.yar")).unwrap();
+
+    assert_eq!(rules.len(), 1);
+    assert_eq!(rules[0].strings[0].identifier, "$path");
+}
+
+#[test]
+fn test_parse_ignores_braces_in_comments_and_regex_strings() {
+    let content = r#"
+rule braces_in_literals {
+    strings:
+        // A closing brace here must not terminate the rule: }
+        $regex = /literal\}/
+    condition:
+        /* Nor should an opening brace in a block comment: { */
+        $regex
+}
+"#;
+
+    let rules = parse_content(content, Path::new("test_file.yar")).unwrap();
+
+    assert_eq!(rules.len(), 1);
+    assert!(rules[0].condition.contains("$regex"));
+}
+
+#[test]
+fn test_parse_rejects_unterminated_rule_after_valid_rule() {
+    let content = r#"
+rule valid_rule {
+    condition:
+        true
+}
+
+rule unterminated_rule {
+    condition:
+        true
+"#;
+
+    let error = parse_content(content, Path::new("test_file.yar")).unwrap_err();
+
+    assert!(error.to_string().contains("unterminated_rule"));
 }

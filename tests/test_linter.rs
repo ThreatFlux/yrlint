@@ -3,7 +3,6 @@ use std::path::Path;
 use tempfile::tempdir;
 use yrlint::config::Config;
 use yrlint::linter::{lint_files, IssueSeverity};
-use yrlint::parser::Rule;
 
 #[test]
 fn test_lint_good_rule() {
@@ -30,17 +29,27 @@ fn test_lint_good_rule() {
 #[test]
 fn test_lint_bad_rule() {
     let config = Config::default();
-    let path = Path::new("examples/bad_rule.yar");
+    let temp_dir = tempdir().unwrap();
+    let file_path = temp_dir.path().join("bad_rule.yar");
+    fs::write(
+        &file_path,
+        r#"
+rule badexample {
+    strings:
+        $a = "a"
+        $unused = "unused string"
+        $bad_regex = /.*example/
+    condition:
+        $a
+}
+"#,
+    )
+    .unwrap();
 
-    // Skip test if the example file doesn't exist
-    if !path.exists() {
-        return;
-    }
-
-    let results = lint_files(&[path], &config, false).unwrap();
+    let results = lint_files(&[&file_path], &config, false).unwrap();
 
     // Bad rule should have multiple issues
-    assert!(results.issues.len() > 0, "Bad rule should have issues");
+    assert!(!results.issues.is_empty(), "Bad rule should have issues");
 
     // Check for specific issues
     let has_short_string_issue = results.issues.iter().any(|i| i.code == "SHORT_STRING");
@@ -58,6 +67,36 @@ fn test_lint_bad_rule() {
         "Should detect forbidden regex pattern"
     );
     assert!(has_unused_string_issue, "Should detect unused string");
+}
+
+#[test]
+fn test_lint_reports_missing_condition_without_dropping_other_rules() {
+    let config = Config::default();
+    let temp_dir = tempdir().unwrap();
+    let file_path = temp_dir.path().join("missing_condition.yar");
+    fs::write(
+        &file_path,
+        r#"
+rule valid_rule {
+    condition:
+        true
+}
+
+rule missing_condition {
+    strings:
+        $text = "still parsed"
+}
+"#,
+    )
+    .unwrap();
+
+    let results = lint_files(&[&file_path], &config, false).unwrap();
+
+    assert_eq!(results.rules_count, 2);
+    assert!(results
+        .issues
+        .iter()
+        .any(|issue| issue.rule_name == "missing_condition" && issue.code == "MISSING_CONDITION"));
 }
 
 #[test]

@@ -8,6 +8,7 @@ use thiserror::Error;
 
 /// YARA parsing errors
 #[derive(Error, Debug)]
+#[allow(clippy::enum_variant_names)] // Preserve the existing public variant name.
 pub enum ParseError {
     #[error("Failed to read file: {0}")]
     FileReadError(#[from] std::io::Error),
@@ -84,6 +85,18 @@ pub enum StringType {
     Regex,
 }
 
+fn is_escaped(bytes: &[u8], index: usize) -> bool {
+    let mut backslashes = 0;
+    let mut cursor = index;
+
+    while cursor > 0 && bytes[cursor - 1] == b'\\' {
+        backslashes += 1;
+        cursor -= 1;
+    }
+
+    backslashes % 2 == 1
+}
+
 /// Parse a YARA rule file
 pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<Vec<Rule>> {
     let path = path.as_ref();
@@ -98,19 +111,145 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
     let path = path.as_ref();
     debug!("Parsing YARA file: {}", path.display());
 
-    // Simple regex-based parser for YARA rules
     let mut rules = Vec::new();
 
-    // Match rule structure
-    let rule_regex = r"(?m)^\s*(?:(?:global|private)\s+)*rule\s+([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_\s]+))?\s*\{([\s\S]*?)\}";
+    let rule_regex = r"(?m)^(?:(?:\s*(?:global|private)\s+)*?)rule\s+([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_\s]+))?\s*\{";
     let rule_pattern = match Regex::new(rule_regex) {
         Ok(re) => re,
         Err(e) => return Err(ParseError::ParseError(format!("Invalid rule regex: {}", e)).into()),
     };
+    let modifiers_pattern = match Regex::new(r"\b(global|private)\b") {
+        Ok(re) => re,
+        Err(e) => {
+            return Err(ParseError::ParseError(format!("Invalid modifiers regex: {}", e)).into())
+        }
+    };
 
-    // Find all rules in the content
-    for cap in rule_pattern.captures_iter(content) {
+    // Scan each rule using brace matching to avoid splitting on braces inside hex strings.
+    let mut offset = 0;
+    let bytes = content.as_bytes();
+    while offset < content.len() {
+        let segment = &content[offset..];
+        let Some(cap) = rule_pattern.captures(segment) else {
+            break;
+        };
+
+        let full_match = match cap.get(0) {
+            Some(m) => m,
+            None => break,
+        };
+
         let name = cap.get(1).map_or("", |m| m.as_str()).to_string();
+
+        let start = offset + full_match.start();
+        let open_brace = offset + full_match.end() - 1;
+        let mut index = open_brace + 1;
+        let mut depth = 1;
+        let mut in_double_quote = false;
+        let mut in_hex_string = false;
+        let mut in_regex_string = false;
+        let mut in_line_comment = false;
+        let mut in_block_comment = false;
+
+        while index < bytes.len() && depth > 0 {
+            let ch = bytes[index];
+
+            if in_line_comment {
+                if ch == b'\n' {
+                    in_line_comment = false;
+                }
+                index += 1;
+                continue;
+            }
+
+            if in_block_comment {
+                if ch == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                    in_block_comment = false;
+                    index += 2;
+                } else {
+                    index += 1;
+                }
+                continue;
+            }
+
+            if in_double_quote {
+                if ch == b'"' && !is_escaped(bytes, index) {
+                    in_double_quote = false;
+                }
+                index += 1;
+                continue;
+            }
+
+            if in_hex_string {
+                if ch == b'}' {
+                    in_hex_string = false;
+                }
+                index += 1;
+                continue;
+            }
+
+            if in_regex_string {
+                if ch == b'/' && !is_escaped(bytes, index) {
+                    in_regex_string = false;
+                }
+                index += 1;
+                continue;
+            }
+
+            match ch {
+                b'"' => {
+                    in_double_quote = true;
+                }
+                b'/' if bytes.get(index + 1) == Some(&b'/') => {
+                    in_line_comment = true;
+                    index += 1;
+                }
+                b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                    in_block_comment = true;
+                    index += 1;
+                }
+                b'/' => {
+                    let mut lookback = index;
+                    while lookback > open_brace + 1 && bytes[lookback - 1].is_ascii_whitespace() {
+                        lookback -= 1;
+                    }
+
+                    if lookback > open_brace + 1 && bytes[lookback - 1] == b'=' {
+                        in_regex_string = true;
+                    }
+                }
+                b'{' => {
+                    let mut lookback = index;
+                    while lookback > open_brace + 1 && bytes[lookback - 1].is_ascii_whitespace() {
+                        lookback -= 1;
+                    }
+
+                    if lookback > open_brace + 1 && bytes[lookback - 1] == b'=' {
+                        in_hex_string = true;
+                    } else {
+                        depth += 1;
+                    }
+                }
+                b'}' => {
+                    depth -= 1;
+                }
+                _ => {}
+            }
+
+            index += 1;
+        }
+
+        if depth != 0 {
+            return Err(ParseError::ParseError(format!(
+                "Rule '{}' has an unterminated string, comment, or unbalanced braces",
+                name
+            ))
+            .into());
+        }
+
+        let close_brace = index - 1;
+        let rule_text = &content[start..=close_brace];
+        let rule_body = &content[open_brace + 1..close_brace];
         let tags_str = cap.get(2).map_or("", |m| m.as_str());
         let tags = tags_str
             .split_whitespace()
@@ -118,24 +257,11 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
             .map(|s| s.to_string())
             .collect::<Vec<_>>();
 
-        let rule_body = cap.get(3).map_or("", |m| m.as_str());
-        let rule_text = cap.get(0).map_or("", |m| m.as_str()).to_string();
-        let line_number = content[..cap.get(0).unwrap().start()].lines().count() + 1;
-
-        // Determine if rule has modifiers
-        let modifiers_regex = r"(?m)^\s*(global|private)\s+rule";
-        let modifiers_pattern = match Regex::new(modifiers_regex) {
-            Ok(re) => re,
-            Err(e) => {
-                return Err(
-                    ParseError::ParseError(format!("Invalid modifiers regex: {}", e)).into(),
-                )
-            }
-        };
+        let line_number = content[..start].lines().count() + 1;
 
         let modifiers = modifiers_pattern
-            .captures_iter(&rule_text)
-            .filter_map(|c| c.get(1))
+            .captures_iter(full_match.as_str())
+            .filter_map(|m| m.get(1))
             .map(|m| m.as_str().to_string())
             .collect::<Vec<_>>();
 
@@ -162,8 +288,10 @@ pub fn parse_content<P: AsRef<Path>>(content: &str, path: P) -> Result<Vec<Rule>
             string_refs,
             condition,
             modules,
-            source: rule_text,
+            source: rule_text.to_string(),
         });
+
+        offset = close_brace + 1;
     }
 
     if rules.is_empty() {

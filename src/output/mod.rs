@@ -3,27 +3,34 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use std::io::{self, Write};
 
-/// Print lint results in the specified format
+/// Print lint results in the specified format.
 pub fn print_results(results: &LintResults, format: &str) -> Result<()> {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    print_results_with_writer(results, format, &mut out)
+}
+
+/// Print lint results in the specified format to a custom writer.
+pub fn print_results_with_writer<W: Write>(
+    results: &LintResults,
+    format: &str,
+    out: &mut W,
+) -> Result<()> {
     match format.to_lowercase().as_str() {
-        "text" => print_text_format(results),
-        "json" => print_json_format(results),
-        "github" => print_github_format(results),
+        "text" => print_text_format(results, out),
+        "json" => print_json_format(results, out),
+        "github" => print_github_format(results, out),
         _ => {
-            eprintln!("Unknown output format: {}. Using text format.", format);
-            print_text_format(results)
+            writeln!(out, "Unknown output format: {}. Using text format.", format)?;
+            print_text_format(results, out)
         }
     }
 }
 
-/// Print results in plain text format
-fn print_text_format(results: &LintResults) -> Result<()> {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-
+fn print_text_format<W: Write>(results: &LintResults, out: &mut W) -> Result<()> {
     writeln!(out, "YARA Rule Linting Results")?;
     writeln!(out, "=========================")?;
-    writeln!(out, "")?;
+    writeln!(out)?;
     writeln!(out, "Files scanned: {}", results.files_count)?;
     writeln!(out, "Rules checked: {}", results.rules_count)?;
     writeln!(out, "Issues found:  {}", results.issues.len())?;
@@ -31,14 +38,13 @@ fn print_text_format(results: &LintResults) -> Result<()> {
     writeln!(out, "  Warnings: {}", results.warning_count)?;
     writeln!(out, "  Info:     {}", results.info_count)?;
     writeln!(out, "Issues fixed: {}", results.fixed_count)?;
-    writeln!(out, "")?;
+    writeln!(out)?;
 
     if results.issues.is_empty() {
         writeln!(out, "No issues found!")?;
         return Ok(());
     }
 
-    // Group issues by file
     let mut issues_by_file = std::collections::HashMap::new();
     for issue in &results.issues {
         issues_by_file
@@ -47,12 +53,10 @@ fn print_text_format(results: &LintResults) -> Result<()> {
             .push(issue);
     }
 
-    // Print issues grouped by file
     for (file_path, issues) in &issues_by_file {
         writeln!(out, "File: {}", file_path)?;
         writeln!(out, "{}", "-".repeat(file_path.len() + 6))?;
 
-        // Group issues by rule
         let mut issues_by_rule = std::collections::HashMap::new();
         for issue in issues {
             issues_by_rule
@@ -73,7 +77,7 @@ fn print_text_format(results: &LintResults) -> Result<()> {
 
                 writeln!(out, "    [{}] {} ({})", severity, issue.message, issue.code)?;
 
-                if let Some(_fix) = &issue.suggested_fix {
+                if issue.suggested_fix.is_some() {
                     writeln!(out, "      Suggested fix available")?;
                 }
             }
@@ -87,8 +91,7 @@ fn print_text_format(results: &LintResults) -> Result<()> {
     Ok(())
 }
 
-/// Print results in JSON format
-fn print_json_format(results: &LintResults) -> Result<()> {
+fn print_json_format<W: Write>(results: &LintResults, out: &mut W) -> Result<()> {
     #[derive(Serialize)]
     struct JsonOutput {
         summary: Summary,
@@ -145,14 +148,12 @@ fn print_json_format(results: &LintResults) -> Result<()> {
 
     let output = JsonOutput { summary, issues };
     let json = serde_json::to_string_pretty(&output).context("Failed to serialize JSON output")?;
-
-    println!("{}", json);
+    writeln!(out, "{}", json)?;
 
     Ok(())
 }
 
-/// Print results in GitHub Actions format
-fn print_github_format(results: &LintResults) -> Result<()> {
+fn print_github_format<W: Write>(results: &LintResults, out: &mut W) -> Result<()> {
     for issue in &results.issues {
         let severity = match issue.severity {
             IssueSeverity::Error => "error",
@@ -160,20 +161,22 @@ fn print_github_format(results: &LintResults) -> Result<()> {
             IssueSeverity::Info => "notice",
         };
 
-        // Format: ::error file={name},line={line},title={title}::{message}
-        println!(
-            "::{}file={},line={},title={}::{} [{}]",
+        writeln!(
+            out,
+            "::{} file={},line={},title={}::{} [{}]",
             severity, issue.file_path, issue.line, issue.code, issue.message, issue.rule_name
-        );
+        )?;
     }
 
-    // Print a summary
-    println!("::notice::YARA Linter found {} errors, {} warnings, and {} info issues across {} rules in {} files.",
-             results.error_count,
-             results.warning_count,
-             results.info_count,
-             results.rules_count,
-             results.files_count);
+    writeln!(
+        out,
+        "::notice::YARA Linter found {} errors, {} warnings, and {} info issues across {} rules in {} files.",
+        results.error_count,
+        results.warning_count,
+        results.info_count,
+        results.rules_count,
+        results.files_count
+    )?;
 
     Ok(())
 }

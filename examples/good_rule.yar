@@ -18,6 +18,6 @@ rule MAL_Ransomware_GoodExample {
         uint16(0) == 0x5A4D and // Check for MZ header first (fast check)
         filesize < 2MB and // Limit file size
         $header and 
-        2 of ($string*) and 
+        2 of ($string*) and
         any of ($hex*, $regex*)
 }

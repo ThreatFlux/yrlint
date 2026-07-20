@@ -107,7 +107,7 @@ ifeq ($(DOCKER_RUNNING), 0)
 endif
 	@echo -e "$(YELLOW)Building Docker image...$(NC)"
 	@mkdir -p $(DOCKER_DIR)
-	@echo 'FROM rust:slim-bullseye' > $(DOCKER_DIR)/Dockerfile
+	@echo 'FROM rust:1.95.0-bookworm' > $(DOCKER_DIR)/Dockerfile
 	@echo 'WORKDIR /app' >> $(DOCKER_DIR)/Dockerfile
 	@echo 'COPY . .' >> $(DOCKER_DIR)/Dockerfile
 	@echo 'RUN cargo build --release' >> $(DOCKER_DIR)/Dockerfile

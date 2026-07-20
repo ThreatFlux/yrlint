@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
 
@@ -82,10 +81,14 @@ rule test_rule {
         .output()
         .expect("Failed to run yrlint with JSON output");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.starts_with("{"), "JSON output should start with {");
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("JSON output should be valid");
     assert!(
-        stdout.contains("\"code\":\"SHORT_STRING\""),
+        json["issues"]
+            .as_array()
+            .expect("JSON output should contain an issues array")
+            .iter()
+            .any(|issue| issue["code"] == "SHORT_STRING"),
         "JSON should contain issue code"
     );
 }

@@ -1,4 +1,4 @@
-mod rules;
+pub mod rules;
 
 use crate::config::Config;
 use crate::parser::{parse_file, Rule};
@@ -98,6 +98,12 @@ impl LintResults {
     /// Increment the fixed count
     pub fn increment_fixed(&mut self) {
         self.fixed_count += 1;
+    }
+}
+
+impl Default for LintResults {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

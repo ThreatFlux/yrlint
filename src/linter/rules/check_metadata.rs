@@ -38,7 +38,7 @@ pub fn check(rule: &Rule, config: &Config) -> Vec<LintIssue> {
 
     // Check for metadata field name consistency
     // For example, if 'desc' is used instead of 'description'
-    for (key, _) in &rule.metadata {
+    for key in rule.metadata.keys() {
         if key == "desc" && !rule.metadata.contains_key("description") {
             issues.push(LintIssue {
                 rule_name: rule.name.clone(),
