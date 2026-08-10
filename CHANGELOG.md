@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-10
+
+### Fixed
+- Scoped the release workflow's token permissions to the minimum the release job needs.
+
+## [0.1.1] - 2026-08-07
+
 ### Added
 - Initial release of YRLint
 - YARA rule parsing using Boreal parser
