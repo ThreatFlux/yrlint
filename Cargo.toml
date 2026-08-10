@@ -1,6 +1,6 @@
 [package]
 name = "yrlint"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["YARA Rule Linter Developer"]
 description = "A linter for YARA rules that checks for best practices and performance issues"
