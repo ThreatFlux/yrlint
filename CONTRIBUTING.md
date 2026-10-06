@@ -9,7 +9,7 @@ Please be respectful and considerate of others when contributing to this project
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/yourusername/yrlint.git`
+2. Clone your fork, replacing `YOUR_USERNAME` with your GitHub username: `git clone https://github.com/YOUR_USERNAME/yrlint.git`
 3. Create a new branch for your feature: `git checkout -b feature-name`
 4. Install development dependencies: `cargo build`
 
@@ -72,9 +72,36 @@ cargo fmt
 
 ## Release Process
 
-1. Update version in `Cargo.toml`
-2. Update `CHANGELOG.md`
-3. Create a new GitHub release with release notes
+Releases are automated. Pull requests are squash-merged, and the pull request
+title becomes the commit subject on `main`, so give it a
+[Conventional Commits](https://www.conventionalcommits.org/) prefix:
+
+- `feat:` releases a new minor version, `fix:` a new patch version, and a
+  breaking change (`feat!:` or a `BREAKING CHANGE:` footer) a new major version.
+- `ci:`, `build:`, `chore:`, `docs:`, `test:` and `refactor:` do not cut a
+  release.
+
+When CI and Security pass for a push to `main`, the Auto Release workflow bumps
+the version in `Cargo.toml` and `Cargo.lock`, tags `vX.Y.Z` and creates the
+GitHub release as the ThreatFlux automation app. The tag starts the Release
+workflow, which builds the binaries, checksums and SBOM, attaches them to the
+release and publishes the crate to crates.io through trusted publishing.
+
+Publishing to crates.io is switched off until the crate's first publish: the
+repository variable `CRATES_IO_PUBLISH` is `false`, so releases skip that step.
+
+Both workflows can be rehearsed without tagging, releasing or publishing
+anything. The release dry run still builds every binary and the SBOM and keeps
+them as artifacts of that workflow run:
+
+```bash
+gh workflow run auto-release.yml -f dry_run=true
+gh workflow run release.yml -f version=X.Y.Z -f dry_run=true
+```
+
+Add user-facing changes to the `[Unreleased]` section of `CHANGELOG.md` as you
+go; the Release workflow uses the `## [X.Y.Z]` section, when one exists, as the
+release notes.
 
 ## License
 

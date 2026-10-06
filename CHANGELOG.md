@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Release builds now attach binaries for Linux (x86_64 glibc and musl, arm64),
+  macOS (arm64, x86_64) and Windows (x86_64), each with a SHA-256 checksum,
+  plus one CycloneDX SBOM for the release.
+- The Docker image builds on Rust 1.99 (Debian 13 trixie) and runs on a
+  distroless Debian 13 base as a non-root user.
+
+### Removed
+- Unused `indicatif` and `pretty_assertions` dependencies.
+
+## [0.1.3] - 2026-08-10
+
+### Changed
+- First tagged release with the 0.1.2 changes; v0.1.2 was prepared but never
+  tagged.
+
 ## [0.1.2] - 2026-08-10
 
 ### Fixed

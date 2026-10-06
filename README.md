@@ -15,21 +15,41 @@ A linter for YARA rules that checks for best practices, performance issues, and 
 
 ## Installation
 
-### From Cargo
+yrlint is not published on crates.io yet, so `cargo install yrlint` does not
+work. Install it from GitHub instead.
+
+### Prebuilt binaries
+
+Releases built by the release workflow attach archives for Linux (x86_64 glibc
+and musl, arm64), macOS (arm64, x86_64) and Windows (x86_64), each with a
+`.sha256` checksum file, plus one CycloneDX SBOM for the release. Download them
+from the [releases page](https://github.com/ThreatFlux/yrlint/releases).
+
+### With Cargo, from Git
 
 ```bash
-cargo install yrlint
+cargo install --locked --git https://github.com/ThreatFlux/yrlint yrlint
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/username/yrlint.git
+git clone https://github.com/ThreatFlux/yrlint.git
 cd yrlint
-cargo build --release
+cargo build --release --locked
 ```
 
 The binary will be available at `target/release/yrlint`.
+
+### Docker
+
+```bash
+make docker-build                      # builds the image tagged yrlint
+docker run --rm -v "$PWD:/data:ro" yrlint -r rules/
+```
+
+The image runs yrlint as a non-root user on a distroless Debian 13 base, with
+`/data` as the working directory.
 
 ## Usage
 
@@ -61,10 +81,11 @@ yrlint -r rules/
 ### Options
 
 ```
+    --generate-config    Write a default configuration file to the --config path
 -c, --config <config>    Path to the configuration file [default: .yrlint.yml]
 -f, --format <format>    Output format (text, json, github) [default: text]
---fix                    Fix issues automatically where possible
---no-fail                Don't fail on lint errors
+-x, --fix                Fix issues automatically where possible
+    --no-fail            Don't fail on lint errors
 -i, --include <include>  File glob patterns to include [default: *.yar,*.yara]
 -e, --exclude <exclude>  File glob patterns to exclude
 -r, --recursive          Recursively search directories
