@@ -27,8 +27,11 @@ on:
         default: false
 
 concurrency:
-  # One run per version; a dry run never cancels or waits on a real release.
-  group: release-${{ github.event.inputs.version || github.ref_name }}${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '-dry-run' || '' }}
+  # One run per version: a tag push (ref v1.2.3) and a dispatch (version 1.2.3)
+  # for the same release share the group and run one after the other, and the
+  # second skips what the first already published. A dry run never waits on a
+  # real release.
+  group: release-${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '-dry-run' || '' }}
   cancel-in-progress: false
 
 env:
@@ -364,14 +367,22 @@ jobs:
 
   publish:
     name: Publish to crates.io
-    needs: [prepare, build]
+    needs: [prepare, build, sbom, upload-assets]
     runs-on: ubuntu-latest
-    # Real publishes skip pre-releases (a version suffix such as 1.2.3-rc1, or the
-    # prerelease dispatch input). A dry run always runs `cargo publish --dry-run`.
+    # A crates.io publish cannot be undone, so a real publish waits until the
+    # binaries, the SBOM and the GitHub release all succeeded. A dry run skips
+    # upload-assets and always runs `cargo publish --dry-run`. Real publishes
+    # skip pre-releases (a version suffix such as 1.2.3-rc1, or the prerelease
+    # dispatch input).
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.dry_run) ||
-      (!contains(needs.prepare.outputs.version, '-') &&
-      !(github.event_name == 'workflow_dispatch' && inputs.prerelease))
+      !cancelled() &&
+      needs.prepare.result == 'success' &&
+      needs.build.result == 'success' &&
+      needs.sbom.result == 'success' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.dry_run) ||
+      (needs.upload-assets.result == 'success' &&
+      !contains(needs.prepare.outputs.version, '-') &&
+      !(github.event_name == 'workflow_dispatch' && inputs.prerelease)))
     # A real publish runs in the crates-io environment that the crate's crates.io
     # trusted publisher names. Dry runs, and repositories that set
     # CRATES_IO_PUBLISH=false, get an empty name instead: the job then runs

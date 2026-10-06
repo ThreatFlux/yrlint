@@ -1,11 +1,13 @@
 name: Auto Release
 
-# Key on the head repository too, so a fork pull request whose branch is named
-# "main" cannot cancel a release run for this repository's main. Dry runs use
-# their own group so they never cancel a real release.
+# Release runs for main are serialized, never cancelled: a release that is
+# pushing its commit, tag and GitHub Release must finish. A queued run that
+# starts after a release skips itself, because main has advanced or the tag
+# exists. The head repository is part of the key, so runs triggered from
+# another repository never share it. Dry runs use their own group.
 concurrency:
   group: auto-release-${{ github.event.workflow_run.head_repository.full_name || github.repository }}-${{ github.event.workflow_run.head_branch || github.ref_name || 'main' }}${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '-dry-run' || '' }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 on:
   # workflow_run is needed to release only after CI and Security pass on main.

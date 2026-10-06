@@ -142,7 +142,7 @@ ifeq ($(DOCKER_RUNNING), 0)
 	@exit 1
 endif
 	@echo -e "$(YELLOW)Running YRLint in Docker...$(NC)"
-	@docker run --rm -v $(CURDIR):/data -w /data yrlint $(ARGS)
+	@docker run --rm -v $(CURDIR):/data -w /data $(DOCKER_IMAGE) $(ARGS)
 
 docker-stop:
 ifeq ($(DOCKER_RUNNING), 0)
@@ -150,7 +150,7 @@ ifeq ($(DOCKER_RUNNING), 0)
 	@exit 1
 endif
 	@echo -e "$(YELLOW)Stopping YRLint Docker containers...$(NC)"
-	@docker ps -q --filter "ancestor=yrlint" | xargs -r docker stop
+	@docker ps -q --filter "ancestor=$(DOCKER_IMAGE)" | xargs -r docker stop
 	@echo -e "$(GREEN)Docker containers stopped successfully$(NC)"
 
 # Install/Uninstall commands
