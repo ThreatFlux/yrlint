@@ -100,8 +100,10 @@ gh workflow run release.yml -f version=X.Y.Z -f dry_run=true
 ```
 
 Add user-facing changes to the `[Unreleased]` section of `CHANGELOG.md` as you
-go; the Release workflow uses the `## [X.Y.Z]` section, when one exists, as the
-release notes.
+go, and move them under a `## [X.Y.Z] - YYYY-MM-DD` heading before the release
+is cut. Auto Release writes release notes only from `feat:`, `fix:` and breaking
+change subjects; the Release workflow replaces them with the `## [X.Y.Z]`
+section of `CHANGELOG.md` when one exists.
 
 ## License
 

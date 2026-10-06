@@ -7,15 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-06
+
 ### Changed
 - Release builds now attach binaries for Linux (x86_64 glibc and musl, arm64),
   macOS (arm64, x86_64) and Windows (x86_64), each with a SHA-256 checksum,
   plus one CycloneDX SBOM for the release.
 - The Docker image builds on Rust 1.99 (Debian 13 trixie) and runs on a
   distroless Debian 13 base as a non-root user.
+- Updated `thiserror` to 2.0 and `env_logger` to 0.11. Log output is
+  unchanged.
+- The crate metadata now points at the real repository,
+  <https://github.com/ThreatFlux/yrlint>, and `Cargo.lock` is committed so
+  release builds are reproducible.
+- The README documents the supported ways to install YRLint: release binaries,
+  `cargo install --git`, building from source and Docker.
 
 ### Removed
-- Unused `indicatif` and `pretty_assertions` dependencies.
+- Unused `indicatif` and `pretty_assertions` dependencies. This also drops the
+  unmaintained `number_prefix` crate (RUSTSEC-2025-0119) from the dependency
+  tree.
 
 ## [0.1.3] - 2026-08-10
 
