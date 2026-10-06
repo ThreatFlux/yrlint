@@ -7,11 +7,16 @@ SHELL := /bin/bash
 SRC_DIR := $(CURDIR)/src
 TESTS_DIR := $(CURDIR)/tests
 EXAMPLES_DIR := $(CURDIR)/examples
-DOCKER_DIR := $(CURDIR)/docker
 
 # Binary paths
 DEBUG_BIN := $(CURDIR)/target/debug/yrlint
 RELEASE_BIN := $(CURDIR)/target/release/yrlint
+
+# Release and container settings
+BINARY_NAME ?= yrlint
+SBOM_MANIFEST_PATH ?= Cargo.toml
+DOCKER_IMAGE ?= yrlint
+VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
 
 # Colors for output
 GREEN := \033[0;32m
@@ -23,15 +28,15 @@ NC := \033[0m # No Color
 DOCKER_RUNNING := $(shell docker info > /dev/null 2>&1 && echo 1 || echo 0)
 
 .PHONY: all build build-debug build-release clean test test-unit test-integration \
-        lint format check docker-build docker-run docker-stop install uninstall \
-        help update-rust setup generate-config
+        lint format check docker-build docker-smoke docker-run docker-stop install uninstall \
+        help update-rust setup generate-config sbom
 
 all: build test
 
 # Setup commands
 setup:
 	@echo -e "$(YELLOW)Setting up YRLint environment...$(NC)"
-	@mkdir -p $(DOCKER_DIR)
+	@cargo fetch --locked
 	@echo -e "$(GREEN)Setup completed successfully$(NC)"
 
 update-rust:
@@ -106,14 +111,30 @@ ifeq ($(DOCKER_RUNNING), 0)
 	@exit 1
 endif
 	@echo -e "$(YELLOW)Building Docker image...$(NC)"
-	@mkdir -p $(DOCKER_DIR)
-	@echo 'FROM rust:1.95.0-bookworm' > $(DOCKER_DIR)/Dockerfile
-	@echo 'WORKDIR /app' >> $(DOCKER_DIR)/Dockerfile
-	@echo 'COPY . .' >> $(DOCKER_DIR)/Dockerfile
-	@echo 'RUN cargo build --release' >> $(DOCKER_DIR)/Dockerfile
-	@echo 'ENTRYPOINT ["/app/target/release/yrlint"]' >> $(DOCKER_DIR)/Dockerfile
-	@docker build -t yrlint -f $(DOCKER_DIR)/Dockerfile .
+	@docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg BINARY_NAME=$(BINARY_NAME) \
+		--build-arg CLI_NAME=$(BINARY_NAME) \
+		--build-arg SBOM_MANIFEST_PATH=$(SBOM_MANIFEST_PATH) \
+		--build-arg "OCI_IMAGE_TITLE=YRLint" \
+		--build-arg "OCI_IMAGE_DESCRIPTION=Linter for YARA and YARA-X rules" \
+		--build-arg OCI_IMAGE_SOURCE=https://github.com/ThreatFlux/yrlint \
+		--build-arg OCI_IMAGE_DOCUMENTATION=https://github.com/ThreatFlux/yrlint#readme \
+		-t $(DOCKER_IMAGE) .
 	@echo -e "$(GREEN)Docker image built successfully$(NC)"
+
+# Smoke-test the image: the binary starts, reports the manifest version, and
+# lints the bundled example rules as the image's non-root user.
+docker-smoke:
+ifeq ($(DOCKER_RUNNING), 0)
+	@echo -e "$(RED)Docker is not running. Please start Docker and try again.$(NC)"
+	@exit 1
+endif
+	@echo -e "$(YELLOW)Smoke-testing Docker image $(DOCKER_IMAGE)...$(NC)"
+	@docker run --rm $(DOCKER_IMAGE) --version | grep -Fx "$(BINARY_NAME) $(VERSION)"
+	@docker run --rm -v $(EXAMPLES_DIR):/data:ro $(DOCKER_IMAGE) good_rule.yar
+	@docker run --rm -v $(EXAMPLES_DIR):/data:ro $(DOCKER_IMAGE) --format json complex_rule.yar > /dev/null
+	@echo -e "$(GREEN)Docker image smoke test passed$(NC)"
 
 docker-run:
 ifeq ($(DOCKER_RUNNING), 0)
@@ -152,6 +173,16 @@ format-check:
 	@cargo fmt -- --check
 	@echo -e "$(GREEN)Format check passed$(NC)"
 
+# Generate a CycloneDX SBOM (needs cargo-cyclonedx)
+sbom:
+	@echo -e "$(YELLOW)Generating SBOM...$(NC)"
+	@mkdir -p sbom
+	@rm -f sbom/*.json
+	@cargo cyclonedx --manifest-path $(SBOM_MANIFEST_PATH) --all-features --format json --spec-version 1.5 --override-filename $(BINARY_NAME)-sbom
+	@find . -maxdepth 4 -path './sbom' -prune -o -path './target' -prune -o -name '$(BINARY_NAME)-sbom.json' -exec mv {} sbom/ \;
+	@test -s 'sbom/$(BINARY_NAME)-sbom.json'
+	@echo -e "$(GREEN)SBOM written to sbom/$(BINARY_NAME)-sbom.json$(NC)"
+
 # Clean up
 clean:
 	@echo -e "$(YELLOW)Cleaning build artifacts...$(NC)"
@@ -174,7 +205,9 @@ help:
 	@echo -e "  $(YELLOW)make format-check$(NC)      - Check if code is properly formatted"
 	@echo -e "  $(YELLOW)make check$(NC)             - Type check without building"
 	@echo -e "  $(YELLOW)make ci$(NC)                - Run CI checks (format, lint, test)"
+	@echo -e "  $(YELLOW)make sbom$(NC)              - Generate a CycloneDX SBOM in sbom/"
 	@echo -e "  $(YELLOW)make docker-build$(NC)      - Build Docker image"
+	@echo -e "  $(YELLOW)make docker-smoke$(NC)      - Smoke-test the Docker image"
 	@echo -e "  $(YELLOW)make docker-run$(NC)        - Run YRLint in Docker (use ARGS='file.yar' to pass arguments)"
 	@echo -e "  $(YELLOW)make docker-stop$(NC)       - Stop YRLint Docker containers"
 	@echo -e "  $(YELLOW)make install$(NC)           - Install YRLint globally"

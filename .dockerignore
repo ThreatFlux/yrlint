@@ -1,3 +1,6 @@
-.git/
-docker/
-target/
+.git
+.github
+target
+dist
+sbom
+docker
