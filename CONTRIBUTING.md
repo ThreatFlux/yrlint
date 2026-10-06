@@ -9,7 +9,7 @@ Please be respectful and considerate of others when contributing to this project
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/<your-username>/yrlint.git`
+2. Clone your fork, replacing `YOUR_USERNAME` with your GitHub username: `git clone https://github.com/YOUR_USERNAME/yrlint.git`
 3. Create a new branch for your feature: `git checkout -b feature-name`
 4. Install development dependencies: `cargo build`
 
@@ -90,7 +90,9 @@ release and publishes the crate to crates.io through trusted publishing.
 Publishing to crates.io is switched off until the crate's first publish: the
 repository variable `CRATES_IO_PUBLISH` is `false`, so releases skip that step.
 
-Both workflows can be rehearsed without side effects:
+Both workflows can be rehearsed without tagging, releasing or publishing
+anything. The release dry run still builds every binary and the SBOM and keeps
+them as artifacts of that workflow run:
 
 ```bash
 gh workflow run auto-release.yml -f dry_run=true

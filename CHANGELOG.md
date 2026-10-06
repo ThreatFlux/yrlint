@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Release builds now attach binaries for Linux (x86_64 glibc and musl, arm64),
-  macOS (arm64, x86_64) and Windows (x86_64), with SHA-256 checksums and a
-  CycloneDX SBOM.
+  macOS (arm64, x86_64) and Windows (x86_64), each with a SHA-256 checksum,
+  plus one CycloneDX SBOM for the release.
 - The Docker image builds on Rust 1.99 (Debian 13 trixie) and runs on a
   distroless Debian 13 base as a non-root user.
 

@@ -22,8 +22,8 @@ work. Install it from GitHub instead.
 
 Releases built by the release workflow attach archives for Linux (x86_64 glibc
 and musl, arm64), macOS (arm64, x86_64) and Windows (x86_64), each with a
-`.sha256` checksum file and a CycloneDX SBOM. Download them from the
-[releases page](https://github.com/ThreatFlux/yrlint/releases).
+`.sha256` checksum file, plus one CycloneDX SBOM for the release. Download them
+from the [releases page](https://github.com/ThreatFlux/yrlint/releases).
 
 ### With Cargo, from Git
 
