@@ -296,6 +296,7 @@ jobs:
           persist-credentials: false
 
       - name: Generate release notes
+        id: notes
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
@@ -312,14 +313,17 @@ jobs:
           ' CHANGELOG.md > changelog_section.md
           if [[ -s changelog_section.md ]]; then
             cat changelog_section.md >> release_notes.md
+            echo "has_changelog=true" >> "$GITHUB_OUTPUT"
           else
             echo "See CHANGELOG.md for details." >> release_notes.md
+            echo "has_changelog=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
+          HAS_CHANGELOG: ${{ steps.notes.outputs.has_changelog }}
           PRERELEASE_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease && 'true' || 'false' }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
@@ -332,8 +336,15 @@ jobs:
           fi
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            # Keep notes already written by auto-release or a maintainer.
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE"
+            # Auto Release creates the release first, with notes built only from
+            # feat, fix and breaking-change commit subjects. The curated
+            # "## [VERSION]" section of CHANGELOG.md replaces them when it
+            # exists; otherwise the existing notes are kept.
+            if [[ "${HAS_CHANGELOG}" == "true" ]]; then
+              gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file release_notes.md
+            else
+              gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE"
+            fi
           elif [[ "${IS_PRERELEASE}" == "true" ]]; then
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TITLE" --notes-file release_notes.md --prerelease
           else
