@@ -2,11 +2,17 @@
 name = "yrlint"
 version = "0.1.3"
 edition = "2021"
-authors = ["YARA Rule Linter Developer"]
+authors = ["ThreatFlux"]
 description = "A linter for YARA rules that checks for best practices and performance issues"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/username/yrlint"
+repository = "https://github.com/ThreatFlux/yrlint"
+homepage = "https://github.com/ThreatFlux/yrlint"
+keywords = ["yara", "yara-x", "linter", "malware", "security"]
+categories = ["command-line-utilities", "development-tools"]
+# Ship only what builds and documents the crate; CI, Docker and example rules
+# stay in the repository.
+include = ["/src", "/Cargo.toml", "/Cargo.lock", "/README.md", "/CHANGELOG.md", "/LICENSE"]
 
 [dependencies]
 # YARA rule parsing using regex
@@ -21,12 +27,9 @@ clap = { version = "4.3", features = ["derive"] }
 
 # Error handling and utilities
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 log = "0.4"
-env_logger = "0.10"
-
-# Progress reporting
-indicatif = "0.17"
+env_logger = "0.11"
 
 # File handling utilities
 globset = "0.4"
@@ -36,5 +39,4 @@ walkdir = "2.3"
 regex = "1.9"
 
 [dev-dependencies]
-pretty_assertions = "1.3"
 tempfile = "3.8"
