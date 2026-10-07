@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `release.yml` ends the Windows archive's `.sha256` line with LF, like the
+  Unix archives' files. The 0.1.4 and 0.1.5 `yrlint-windows-amd64.zip.sha256`
+  assets have no line ending at all; `shasum -a 256 -c` and `sha256sum -c`
+  still verify them.
+
 ## [0.1.5] - 2026-10-07
 
 ### Changed
