@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-07
+
+### Changed
+- The README documents installing yrlint from crates.io with
+  `cargo install yrlint --locked`, the first release prepared for crates.io.
+  The linter itself is unchanged from 0.1.4.
+
 ## [0.1.4] - 2026-10-06
 
 ### Changed
