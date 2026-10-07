@@ -232,8 +232,11 @@ jobs:
           Copy-Item LICENSE, README.md dist/
           $archive = "${env:BINARY_NAME}-${env:ARTIFACT}.zip"
           Compress-Archive -Path dist/* -DestinationPath $archive
-          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
-          "$hash  $archive" | Out-File -FilePath "$archive.sha256" -Encoding ascii -NoNewline
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          # The "<hash>  <file>" line shasum writes, ending in LF like the Unix
+          # archives' .sha256 files (Out-File -NoNewline left it unterminated).
+          [System.IO.File]::WriteAllText((Join-Path $PWD "$archive.sha256"), "$hash  $archive`n")
+          Get-Content "$archive.sha256"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
