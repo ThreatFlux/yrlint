@@ -1,6 +1,6 @@
 [package]
 name = "yrlint"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 authors = ["ThreatFlux"]
 description = "A linter for YARA rules that checks for best practices and performance issues"

@@ -15,8 +15,14 @@ A linter for YARA rules that checks for best practices, performance issues, and 
 
 ## Installation
 
-yrlint is not published on crates.io yet, so `cargo install yrlint` does not
-work. Install it from GitHub instead.
+### From crates.io
+
+```bash
+cargo install yrlint --locked
+```
+
+If [crates.io](https://crates.io/crates/yrlint) does not list a release yet,
+use one of the options below.
 
 ### Prebuilt binaries
 

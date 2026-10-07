@@ -88,7 +88,39 @@ workflow, which builds the binaries, checksums and SBOM, attaches them to the
 release and publishes the crate to crates.io through trusted publishing.
 
 Publishing to crates.io is switched off until the crate's first publish: the
-repository variable `CRATES_IO_PUBLISH` is `false`, so releases skip that step.
+repository variable `CRATES_IO_PUBLISH` is `false`, so releases skip that step,
+because crates.io trusted publishing cannot create a new crate.
+
+### First crates.io publish (one time)
+
+A maintainer publishes the first version by hand from a release tag, with a
+short-lived API token:
+
+1. On crates.io, create an API token under Account Settings > API Tokens with
+   the `publish-new` scope, restricted to the `yrlint` crate name, with the
+   shortest expiry available.
+2. Publish from a clean checkout of the release tag:
+
+   ```bash
+   git clone --depth 1 --branch vX.Y.Z https://github.com/ThreatFlux/yrlint /tmp/yrlint-publish
+   cd /tmp/yrlint-publish
+   cargo login            # paste the token when prompted
+   cargo publish --locked -p yrlint
+   cargo logout
+   ```
+
+3. Revoke the token on crates.io.
+
+Then switch the repository to trusted publishing:
+
+1. On the crate's crates.io Settings > Trusted Publishing page, add a GitHub
+   publisher: owner `ThreatFlux`, repository `yrlint`, workflow `release.yml`,
+   environment `crates-io`.
+2. Delete the `CRATES_IO_PUBLISH` repository variable
+   (`gh variable delete CRATES_IO_PUBLISH -R ThreatFlux/yrlint`), so the next
+   release publishes through the Release workflow.
+3. On the same crates.io settings page, turn on "Require trusted publishing" so
+   API tokens can no longer publish the crate.
 
 Both workflows can be rehearsed without tagging, releasing or publishing
 anything. The release dry run still builds every binary and the SBOM and keeps
