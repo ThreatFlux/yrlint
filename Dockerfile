@@ -1,56 +1,63 @@
-# ThreatFlux Rust Dockerfile
-# Canonical multi-stage build for single-crate or workspace-based applications.
+# YRLint static runtime adaptation of the ThreatFlux build pattern
+# Multi-stage build for single-crate or workspace-based applications.
 #
-# This file is the single source of truth for every ThreatFlux Rust repo that
-# ships a binary. It is intended to be byte-identical across repos: everything
-# repo-specific is a build ARG, supplied by .github/workflows/docker.yml from
-# repository variables. A CI conformance job diffs each repo's copy against this
-# one, so DO NOT fork it — if you need something it cannot express, add an ARG
-# here instead.
+# Build a fully static musl CLI and tini, then ship only those executables,
+# CA certificates and nonroot account data in distroless/static. No glibc,
+# zlib, GCC shared runtime, shell or package manager is shipped. Keep all
+# Cargo features and explicit runtime trust roots.
+# Repo-specific values are build ARGs; .github/workflows/docker.yml supplies
+# them from repository variables.
 #
-# The runtime stage is distroless: no shell, no package manager, no coreutils.
-# If you genuinely need a shell at runtime, use the sanctioned Dockerfile.debian
-# variant rather than editing this file.
-#
-# Base images are pinned by digest for reproducibility (Scorecard Pinned-Dependencies).
-# Refresh with: docker buildx imagetools inspect <image> | awk '/^Digest:/{print $2}'
-# Dependabot refreshes the first FROM (the Rust builder); maintainers refresh
-# the later runtime digest with the command above during template updates.
+# Base images are pinned by digest for reproducibility (Scorecard
+# Pinned-Dependencies). Refresh with:
+#   docker buildx imagetools inspect <image> | awk '/^Digest:/{print $2}'
+# Dependabot refreshes the Rust builder; refresh the runtime digest with the
+# command above when it is updated.
 
-FROM rust:1.99.1-trixie@sha256:e259494b14672950a909b4c54527e19d29cae6ebf980672114c8bb85e5594e4a AS rust-base
+# Refresh trust data and its package provenance together. Distroless currently
+# has fixed CA data but stale package metadata; never globally dismiss the
+# advisory while older published images still trust the distrusted roots.
+FROM --platform=$BUILDPLATFORM debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad AS trust-store
+
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+    dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge 20250419+deb13u1 && \
+    dpkg-query -s ca-certificates > /ca-certificates.status && \
+    rm -rf /var/lib/apt/lists/*
+
+# rust 1.99.1 on Alpine 3.24 (musl); multi-arch index digest
+FROM rust:1.99.1-alpine3.24@sha256:557a94c82b485a14b569120e00867267108c734efe33f10cc31ca0cd5dd1eca9 AS rust-base
 
 ARG VERSION=0.0.0
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
-ARG BINARY_NAME=rust-cicd-template
-ARG BINARY_PACKAGE=
-ARG CLI_NAME=rust-cicd-template
+ARG BINARY_NAME=yrlint
+ARG BINARY_PACKAGE=yrlint
+ARG CLI_NAME=yrlint
 ARG SBOM_MANIFEST_PATH=Cargo.toml
-# Space-separated extra apt packages required to COMPILE, e.g. "clang lld build-essential".
-# Build-time only — the distroless runtime has no package manager, so extra
-# RUNTIME packages are supported exclusively by Dockerfile.debian.
-ARG EXTRA_BUILD_PACKAGES=
-ARG OCI_IMAGE_TITLE=Rust Application
-ARG OCI_IMAGE_DESCRIPTION=Rust Application
+ARG OCI_IMAGE_TITLE="YRLint runtime"
+ARG OCI_IMAGE_DESCRIPTION="YRLint maintained static runtime"
 ARG OCI_IMAGE_VENDOR=ThreatFlux
-ARG OCI_IMAGE_SOURCE=https://github.com
+ARG OCI_IMAGE_SOURCE=https://github.com/ThreatFlux/yrlint
 
-# tini is installed here so the runtime stage can copy it out: distroless ships
-# no init, and PID 1 must reap zombies and forward signals. Exact Debian package
-# revisions are intentionally not pinned because this cross-repo template accepts
-# arbitrary EXTRA_BUILD_PACKAGES and follows the repositories in its pinned base.
-# hadolint ignore=DL3008
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# tini-static preserves signal forwarding and zombie reaping without a libc
+# dependency. Build tools stay in the builder; OpenSSL is vendored by Cargo.
+RUN apk add --no-cache \
+    binutils \
+    build-base \
     ca-certificates \
-    pkg-config \
-    libssl-dev \
-    tini \
-    ${EXTRA_BUILD_PACKAGES} \
-    && rm -rf /var/lib/apt/lists/*
+    cmake \
+    linux-headers \
+    perl \
+    pkgconf \
+    tini-static
 
 FROM rust-base AS builder
 
-RUN useradd -m -u 1000 builder
+# Bound compilation parallelism on shared builders and emulated platforms.
+ENV CARGO_BUILD_JOBS=2
+
+RUN adduser -D -u 1000 builder
 USER builder
 WORKDIR /build
 
@@ -59,12 +66,26 @@ ENV PATH="/home/builder/.cargo/bin:${PATH}"
 
 COPY --chown=builder:builder . .
 
+# An explicit target keeps host proc macros separate from target static flags.
+# Disable Rust's older bundled musl CRT: link the maintained Alpine libc.a.
+# Keep only Rust's LLVM unwinder in a separate search path (never bundled libc).
+# Prove the selected archive from the link map and reject dynamic dependencies.
 RUN rustc --version --verbose && cargo --version && \
-    if [ -n "${BINARY_PACKAGE}" ]; then \
-      cargo build --locked --release -p "${BINARY_PACKAGE}" --bin "${BINARY_NAME}" --all-features; \
-    else \
-      cargo build --locked --release --bin "${BINARY_NAME}" --all-features || cargo build --locked --release --all-features; \
-    fi
+    build_target="$(rustc -vV | sed -n 's/^host: //p')" && \
+    mkdir -p /home/builder/native-unwind && \
+    cp "$(rustc --print sysroot)/lib/rustlib/${build_target}/lib/self-contained/libunwind.a" /home/builder/native-unwind/ && \
+    RUSTFLAGS="-C target-feature=+crt-static -C link-self-contained=no -C linker=cc -C relocation-model=pic -C link-arg=-static-pie -L native=/home/builder/native-unwind -C link-arg=-Wl,-Map=/home/builder/native-link.map" OPENSSL_STATIC=1 \
+      cargo build --locked --release --target "${build_target}" \
+        ${BINARY_PACKAGE:+-p "${BINARY_PACKAGE}"} --bin "${BINARY_NAME}" --all-features && \
+    musl_archive="$(grep -oE '/[^[:space:](]+/libc\.a' /home/builder/native-link.map | sort -u)" && \
+    test "$(readlink -f "${musl_archive}")" = /usr/lib/libc.a && \
+    readelf -h "target/${build_target}/release/${BINARY_NAME}" | grep -q 'Type:.*DYN' && \
+    for executable in "target/${build_target}/release/${BINARY_NAME}" /sbin/tini-static; do \
+      if readelf -l "${executable}" | grep -q INTERP || \
+         readelf -d "${executable}" | grep -q NEEDED; then \
+        echo "Dynamic dependency in ${executable}" >&2; exit 1; \
+      fi; \
+    done
 
 # cargo-cyclonedx writes the SBOM beside the manifest it was handed, which in a
 # workspace is not necessarily /build. The find normalizes the output location.
@@ -75,14 +96,14 @@ RUN cargo install cargo-cyclonedx --locked --version 0.5.9 && \
       --format json \
       --spec-version 1.5 \
       --override-filename "${BINARY_NAME}-sbom" && \
-    find /build -name "${BINARY_NAME}-sbom.json" -exec cp {} /build/sbom.cdx.json \; -quit
+    find /build -name "${BINARY_NAME}-sbom.json" -exec cp {} /build/sbom.cdx.json \; -quit && \
+    test -s /build/sbom.cdx.json
 
 # Stage the runtime filesystem under a fixed layout.
 #
-# The binary is staged as `app` at a FIXED path deliberately: exec-form
-# ENTRYPOINT and HEALTHCHECK do NOT expand build ARGs, so they cannot reference
-# ${CLI_NAME}. A symlink preserves the friendly name for `docker run <img>` and
-# for anyone exec'ing into the Dockerfile.debian variant.
+# The binary is staged as `app` at a FIXED path: exec-form ENTRYPOINT and
+# HEALTHCHECK do not expand build ARGs. A symlink keeps the CLI's own name
+# (`yrlint`) available on PATH.
 #
 # Writable directories are created here because the distroless runtime has no
 # shell to mkdir with; ownership is applied on the way in via COPY --chown.
@@ -90,25 +111,29 @@ RUN mkdir -p /home/builder/out/bin /home/builder/out/doc \
              /home/builder/runtime-skel/data \
              /home/builder/runtime-skel/config \
              /home/builder/runtime-skel/output && \
-    cp "target/release/${BINARY_NAME}" /home/builder/out/bin/app && \
+    build_target="$(rustc -vV | sed -n 's/^host: //p')" && \
+    cp "target/${build_target}/release/${BINARY_NAME}" /home/builder/out/bin/app && \
     if [ "${CLI_NAME}" != "app" ]; then \
       ln -s app "/home/builder/out/bin/${CLI_NAME}"; \
     fi && \
-    cp /build/sbom.cdx.json /home/builder/out/doc/sbom.cdx.json
+    cp /build/sbom.cdx.json /home/builder/out/doc/sbom.cdx.json && \
+    { rustc -vV; apk list --installed musl musl-dev tini-static; \
+      sha256sum /usr/lib/libc.a /sbin/tini-static /home/builder/native-unwind/libunwind.a; \
+      grep -oE '/[^[:space:](]+/libc\.a' /home/builder/native-link.map | sort -u; \
+    } > /home/builder/out/doc/native-build.txt
 
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:b7e81cb1af38d9345680e68bcf564d388f96304e25222030fc8c051faf8565b3 AS runtime
+# Static distroless: certificates/account data, no dynamic libc; multi-arch digest
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:516757106de35205efb70b91ba03f6f1298424a0678c603255cf2852a7000087 AS runtime
 
 ARG VERSION=0.0.0
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
-# Advertised listening port. Metadata only — this does not publish the port.
-ARG APP_PORT=8080
-ARG OCI_IMAGE_TITLE=Rust Application
-ARG OCI_IMAGE_DESCRIPTION=Rust Application
+ARG OCI_IMAGE_TITLE="YRLint runtime"
+ARG OCI_IMAGE_DESCRIPTION="YRLint maintained static runtime"
 ARG OCI_IMAGE_VENDOR=ThreatFlux
-ARG OCI_IMAGE_SOURCE=https://github.com
+ARG OCI_IMAGE_SOURCE=https://github.com/ThreatFlux/yrlint
 ARG OCI_IMAGE_LICENSES=MIT
-ARG OCI_IMAGE_DOCUMENTATION=https://github.com
+ARG OCI_IMAGE_DOCUMENTATION=https://github.com/ThreatFlux/yrlint/blob/main/README.md
 
 LABEL org.opencontainers.image.title="${OCI_IMAGE_TITLE}" \
       org.opencontainers.image.description="${OCI_IMAGE_DESCRIPTION}" \
@@ -120,10 +145,19 @@ LABEL org.opencontainers.image.title="${OCI_IMAGE_TITLE}" \
       org.opencontainers.image.licenses="${OCI_IMAGE_LICENSES}" \
       org.opencontainers.image.documentation="${OCI_IMAGE_DOCUMENTATION}"
 
-COPY --from=builder /usr/bin/tini /usr/bin/tini
+# These are the only CA trust files in the pinned static base. Copy the fixed
+# supplier data and exact installed-package record, not a relabeled version.
+COPY --from=trust-store /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=trust-store /ca-certificates.status /var/lib/dpkg/status.d/ca-certificates
 
-COPY --from=builder --chown=65532:65532 /home/builder/out/bin/ /usr/local/bin/
-COPY --from=builder --chown=65532:65532 /home/builder/out/doc/ /usr/share/doc/app/
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+COPY --from=builder /sbin/tini-static /usr/bin/tini
+
+# The binary and SBOM stay root-owned so the runtime user cannot modify them;
+# only the working directories belong to the nonroot user.
+COPY --from=builder --chown=0:0 /home/builder/out/bin/ /usr/local/bin/
+COPY --from=builder --chown=0:0 /home/builder/out/doc/ /usr/share/doc/app/
 COPY --from=builder --chown=65532:65532 /home/builder/runtime-skel/data /data
 COPY --from=builder --chown=65532:65532 /home/builder/runtime-skel/config /config
 COPY --from=builder --chown=65532:65532 /home/builder/runtime-skel/output /output
@@ -131,13 +165,9 @@ COPY --from=builder --chown=65532:65532 /home/builder/runtime-skel/output /outpu
 USER 65532:65532
 WORKDIR /data
 
-ENV RUST_LOG=info
-
 # Exec form (there is no shell in distroless); a nonzero exit means unhealthy.
-# Every ThreatFlux CLI must therefore implement `--version`.
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD ["/usr/local/bin/app", "--version"]
 
-EXPOSE ${APP_PORT}
-
+# Arguments go straight to the CLI: `docker run <image> --help`.
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/app"]
