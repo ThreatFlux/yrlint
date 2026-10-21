@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Updated Rust to 1.99.1 across local development, CI, releases and Docker.
+- Refreshed all direct crate requirements, the dependency lockfile, GitHub
+  Actions and Docker image pins to their latest stable releases.
+- Replaced deprecated `serde_yaml` and its unmaintained `unsafe-libyaml`
+  dependency with the maintained pure-Rust `serde-saphyr` YAML parser.
+
 ### Fixed
 - `release.yml` ends the Windows archive's `.sha256` line with LF, like the
   Unix archives' files. The 0.1.4 and 0.1.5 `yrlint-windows-amd64.zip.sha256`

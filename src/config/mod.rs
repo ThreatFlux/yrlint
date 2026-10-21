@@ -155,7 +155,7 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config> {
         let config_str = fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;
 
-        let config = serde_yaml::from_str(&config_str)
+        let config = serde_saphyr::from_str(&config_str)
             .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
 
         info!("Loaded configuration from {}", path.display());
@@ -172,7 +172,7 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config> {
             )
         })?;
 
-        let config = serde_yaml::from_str(&config_str).with_context(|| {
+        let config = serde_saphyr::from_str(&config_str).with_context(|| {
             format!(
                 "Failed to parse default config file: {}",
                 default_path.display()
@@ -196,7 +196,7 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Config> {
 pub fn write_default_config<P: AsRef<Path>>(path: P) -> Result<()> {
     let config = Config::default();
     let yaml =
-        serde_yaml::to_string(&config).context("Failed to serialize default configuration")?;
+        serde_saphyr::to_string(&config).context("Failed to serialize default configuration")?;
 
     fs::write(path, yaml).context("Failed to write default configuration file")?;
 
