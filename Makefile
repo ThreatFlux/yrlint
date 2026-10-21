@@ -134,6 +134,7 @@ endif
 	@docker run --rm $(DOCKER_IMAGE) --version | grep -Fx "$(BINARY_NAME) $(VERSION)"
 	@docker run --rm -v $(EXAMPLES_DIR):/data:ro $(DOCKER_IMAGE) good_rule.yar
 	@docker run --rm -v $(EXAMPLES_DIR):/data:ro $(DOCKER_IMAGE) --format json complex_rule.yar > /dev/null
+	@python3 scripts/check_static_image.py $(DOCKER_IMAGE)
 	@echo -e "$(GREEN)Docker image smoke test passed$(NC)"
 
 docker-run:

@@ -113,8 +113,19 @@ jobs:
         run: cargo publish --locked --dry-run
 
   docker:
-    name: Docker image
-    runs-on: ubuntu-latest
+    name: Docker image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -126,3 +137,27 @@ jobs:
 
       - name: Smoke-test image
         run: make docker-smoke DOCKER_IMAGE=yrlint:ci
+
+      - name: Scan all OS and Cargo severities
+        id: trivy
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.0
+          image-ref: yrlint:ci
+          format: sarif
+          output: trivy-results.sarif
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          vuln-type: os,library
+          exit-code: '1'
+
+      - name: Upload complete image scan
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: trivy-results.sarif
+          category: yrlint-image-${{ matrix.arch }}
+
+      - name: Require clean vulnerability scan
+        if: steps.trivy.outcome != 'success'
+        run: exit 1
