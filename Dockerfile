@@ -28,6 +28,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # rust 1.99.1 on Alpine 3.24 (musl); multi-arch index digest
 FROM rust:1.99.1-alpine3.24@sha256:44819b27be4c97b0e4d7203bd2e02c4820f97700211b6a37fb4c246a2de59383 AS rust-base
 
+# Rust 1.100.0 is stable; its official container tags are not available yet.
+# Use the pinned 1.99.1 image only to bootstrap the exact production compiler.
+ENV RUST_VERSION=1.100.0
+RUN rustup toolchain install 1.100.0 --profile minimal --no-self-update && \
+    rustup default 1.100.0 && \
+    rustup toolchain uninstall 1.99.1 && \
+    rustc --version | grep -q '^rustc 1[.]100[.]0 '
+
 ARG VERSION=0.0.0
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown

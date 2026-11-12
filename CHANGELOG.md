@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Updated Rust to 1.99.1 across local development, CI, releases and Docker.
+- Updated Rust to 1.100.0 across local development, CI, releases and Docker.
+  The pinned 1.99.1 image only bootstraps the compiler until official 1.100
+  container tags are available; the compiled Rust version is asserted.
 - Refreshed all direct crate requirements, the dependency lockfile, GitHub
   Actions and Docker image pins to their latest stable releases.
 - Replaced deprecated `serde_yaml` and its unmaintained `unsafe-libyaml`
