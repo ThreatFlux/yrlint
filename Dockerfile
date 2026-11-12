@@ -32,6 +32,7 @@ FROM rust:1.99.1-alpine3.24@sha256:44819b27be4c97b0e4d7203bd2e02c4820f97700211b6
 # Use the pinned 1.99.1 image only to bootstrap the exact production compiler.
 ENV RUST_VERSION=1.100.0
 RUN rustup toolchain install 1.100.0 --profile minimal --no-self-update && \
+    rustup component add --toolchain 1.100.0 clippy rustfmt && \
     rustup default 1.100.0 && \
     rustup toolchain uninstall 1.99.1 && \
     rustc --version | grep -q '^rustc 1[.]100[.]0 '
