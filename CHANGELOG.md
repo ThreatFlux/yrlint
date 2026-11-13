@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   installed before the nonroot build and the compiler version is asserted.
 - Refreshed all direct crate requirements, the dependency lockfile, GitHub
   Actions and Docker image pins to their latest stable releases.
+- Adopted the verified shared release workflow for current-main publishing
+  and read-only feature previews.
 - Replaced deprecated `serde_yaml` and its unmaintained `unsafe-libyaml`
   dependency with the maintained pure-Rust `serde-saphyr` YAML parser.
 
