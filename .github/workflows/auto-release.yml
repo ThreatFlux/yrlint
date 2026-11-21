@@ -1,7 +1,7 @@
 name: Auto Release
 
-# Release runs for main are serialized, never cancelled: a release that is
-# pushing its commit, tag and GitHub Release must finish. A queued run that
+# Release runs for main are serialized, never cancelled: updating a release
+# proposal or publishing a tag and GitHub Release must finish. A queued run that
 # starts after a release skips itself, because main has advanced or the tag
 # exists. The head repository is part of the key, so runs triggered from
 # another repository never share it. Dry runs use their own group.
@@ -58,9 +58,10 @@ jobs:
       bump: ${{ github.event.inputs.version_bump || 'auto' }}
       # Only a manual dispatch can request a dry run; workflow_run always releases.
       dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      create-pr: true
       required-workflows: CI,Security
-      # The release commit and tag are pushed as the threatflux-automation App,
-      # so the tag push starts release.yml by itself and the reusable workflow
+      # After the release proposal merges, the threatflux-automation App pushes
+      # the tag, which starts release.yml by itself. The reusable workflow
       # skips this dispatch. It only runs when the App credentials are absent
       # and the release falls back to GITHUB_TOKEN, whose tag starts nothing.
       dispatch-workflows: release.yml
