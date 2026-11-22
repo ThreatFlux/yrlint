@@ -81,11 +81,20 @@ title becomes the commit subject on `main`, so give it a
 - `ci:`, `build:`, `chore:`, `docs:`, `test:` and `refactor:` do not cut a
   release.
 
-When CI and Security pass for a push to `main`, the Auto Release workflow bumps
-the version in `Cargo.toml` and `Cargo.lock`, tags `vX.Y.Z` and creates the
-GitHub release as the ThreatFlux automation app. The tag starts the Release
+When CI and Security pass for a push to `main` with releasable changes, the Auto
+Release workflow opens or refreshes a pull request bumping the version in
+`Cargo.toml` and `Cargo.lock`. A code owner reviews the proposal before it can
+merge. Once CI and Security pass on the merged commit, the ThreatFlux automation
+app tags it as `vX.Y.Z` and creates the GitHub release. The tag starts the Release
 workflow, which builds the binaries, checksums and SBOM, attaches them to the
 release and publishes the crate to crates.io through trusted publishing.
+
+Auto Release tags an untagged manifest version only when the tested commit is
+the merge of its release proposal and has the same file tree. If the source
+check refuses to tag an untagged version, restore the version from the latest
+tag in `Cargo.toml` and `Cargo.lock` through a reviewed pull request. Auto
+Release then recalculates the next version from the unreleased history and
+opens a fresh proposal.
 
 Publishing to crates.io is switched off until the crate's first publish: the
 repository variable `CRATES_IO_PUBLISH` is `false`, so releases skip that step,
